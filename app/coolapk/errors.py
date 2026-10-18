@@ -13,11 +13,16 @@ class CredentialMissing(CoolapkError):
     """本地缺凭证文件（cookie / device / auth blob）。"""
 
 
-class EdgeBlocked(CoolapkError):
-    """被 CDN 边缘节点（TencentEdgeOne）拦截：403 + 空响应体。
+class PathRejected(CoolapkError):
+    """上游拒绝了该路径/凭据：`403` 且响应体 `0 字节`。
 
-    通常是出口 IP 被路径级规则拦掉，与 cookie 是否过期无关。
-    处置：换国内出口，或把 upstream.base 指向国内中转。
+    判据（能与不能）：
+    - 能：`403` + 响应体 0 字节，说明"这次请求的路径或凭据被拒"，换 cookie 也不一定解决。
+    - **不能归因**到 CDN 边缘节点：`Server: …EdgeOne` / `EO-LOG-UUID` 在 `200`
+      响应上同样出现，区分不了「边缘拦截」与「源站拒绝路径/凭据」。当前实现把它们当作
+      进入本分支的必要条件，那只是**观测到的伴随特征**，不是归因依据。
+    - 「换国内出口」「指向国内中转」**都是未验证假设**，不是处置结论；可验证的对照办法见
+      `docs/ARCHITECTURE.md` 第 5 节（在国内机器上三行 curl 即可对照，本机只有一个出口的样本）。
     """
 
 

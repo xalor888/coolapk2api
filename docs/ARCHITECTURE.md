@@ -60,14 +60,19 @@ token  = "v3" + base64(hash)                 # 82 字符
 
 | 现象 | 判定 | 对外 |
 |---|---|---|
-| `403` + 空体 + `Server: TencentEdgeOne`（带 `EO-LOG-UUID`） | `EdgeBlocked` | 502 `upstream_unreachable` |
+| `403` + 空体（当前实现另要求带 `Server: …EdgeOne` 或 `EO-LOG-UUID`） | `PathRejected` | 502 `upstream_unreachable` |
 | `200` + `{"status":403,"message":"API unsupported."}` | `AuthExpired` | 502 `upstream_auth` |
 | 其他非 200 | `UpstreamHTTP` | 502 `upstream_error` |
 | 搜不到带 `aiAccessKey` 的帖子 | `FeedUnavailable` | 503 `upstream_unavailable` |
 | 本地缺 cookie/blob | `CredentialMissing` | 500 `configuration_error` |
 
-第一条尤其重要：**403 空响应不是 cookie 过期**，换 cookie 也没用，只能换出口 IP。
-诊断器 `tools/doctor.py` 会把这一条单独报出来。
+第一条尤其重要：**403 空响应不是 cookie 过期的证据**——它只说明"这次请求的路径或凭据被拒"，
+换 cookie 未必有用，换出口 IP 也只是**未验证的假设**（见第 5 节）。诊断器 `tools/doctor.py`
+会把这一条单独报出来。
+
+> 已知的假（先写出来，别让它继续以类名流传）：类名叫 `PathRejected`，而线上错误码仍是
+> `upstream_unreachable` —— 这个名字说的"路径被拒"和码面说的"上游不可达"并不一致。
+> 改码会静默打断下游客户端（协议变更），故**待定**，不在本次改动范围。
 
 ## 5. 出口 IP 与「国内中转」方案
 

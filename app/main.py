@@ -17,7 +17,7 @@ from .adapters import anthropic, openai, prompt as prompt_adapter
 from .config import Settings, load_settings
 from .coolapk import CoolapkClient
 from .coolapk.errors import (AuthExpired, CoolapkError, CredentialMissing,
-                             EdgeBlocked, FeedUnavailable, UpstreamHTTP)
+                             FeedUnavailable, PathRejected, UpstreamHTTP)
 
 log = logging.getLogger("coolapk2api")
 STATIC = Path(__file__).resolve().parent / "static"
@@ -160,7 +160,7 @@ def _error_response(exc: Exception, builder, request: Request) -> JSONResponse:
     """异常 -> 合适的 HTTP 状态码 + 协议错误体。"""
     if isinstance(exc, CredentialMissing):
         return JSONResponse(builder(str(exc), 500, "configuration_error"), status_code=500)
-    if isinstance(exc, EdgeBlocked):
+    if isinstance(exc, PathRejected):
         return JSONResponse(builder(str(exc), 502, "upstream_unreachable"), status_code=502)
     if isinstance(exc, AuthExpired):
         return JSONResponse(builder(str(exc), 502, "upstream_auth"), status_code=502)

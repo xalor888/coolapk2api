@@ -46,7 +46,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _edge_block(self) -> None:
+    def _blocked_path(self) -> None:
         self.send_response(403)
         self.send_header("Content-Type", "text/html; charset=UTF-8")
         self.send_header("Server", "TencentEdgeOne")
@@ -58,7 +58,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if MODE == "blocked_path" and path.startswith("/v6/"):
-            return self._edge_block()
+            return self._blocked_path()
         if path == "/v6/main/init":
             if MODE == "auth":   # 复刻源站对失效接口的 200+JSON 拒绝
                 return self._send_json({"status": 403, "message": "API unsupported."})
@@ -73,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b""
 
         if MODE == "blocked_path" and path.startswith("/v6/"):
-            return self._edge_block()
+            return self._blocked_path()
         if MODE == "auth":
             return self._send_json({"status": 403, "message": "API unsupported."})
 

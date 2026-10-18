@@ -14,8 +14,8 @@ import requests
 
 from ..config import Settings
 from . import auth
-from .errors import (AuthExpired, CoolapkError, CredentialMissing, EdgeBlocked,
-                     FeedUnavailable, UpstreamHTTP)
+from .errors import (AuthExpired, CoolapkError, CredentialMissing,
+                     FeedUnavailable, PathRejected, UpstreamHTTP)
 
 VERSION_NAME = "16.6.4"
 VERSION_CODE = 2_609_291
@@ -124,7 +124,7 @@ class CoolapkClient:
 
         if resp.status_code == 403 and not text.strip() and (
                 "EdgeOne" in server or "EO-LOG-UUID" in resp.headers):
-            raise EdgeBlocked(
+            raise PathRejected(
                 "上游拒绝该路径：403 + 0 字节响应体（路径/凭据被拒）。"
                 "注意 Server 与 EO-LOG-UUID 在 200 上同样出现，不能据此归因到边缘节点；"
                 "换出口仅是可验证的假设之一，先确认 cookie 是否有效。"
@@ -273,7 +273,7 @@ class CoolapkClient:
                 ctx = self.context(force=True)
                 info["feed_id"] = ctx.feed_id
             info["ok"] = True
-        except EdgeBlocked as exc:
+        except PathRejected as exc:
             info.update(stage="blocked_path", error=str(exc))
         except AuthExpired as exc:
             info.update(stage="auth", error=str(exc))
