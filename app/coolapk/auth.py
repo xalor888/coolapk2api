@@ -144,10 +144,17 @@ def decode_device_spec(spec: str) -> str:
     输出：base64(``{duid}; ; ; ; {manu}; {brand}; {model}; {display}; {oaid}``) 反转去 '='
     """
     parts = [p.strip() for p in spec.strip().split(":")]
-    if len(parts) < 7:
+    # 兼容两种写法：
+    #   7 段：<标签>:<duid>:<厂商>:<品牌>:<机型>:<显示>:<oaid>   （App 抓包里的原样）
+    #   6 段：<duid>:<厂商>:<品牌>:<机型>:<显示>:<oaid>         （手工精简）
+    if len(parts) >= 7:
+        _, duid, manu, brand, model, display, oaid = parts[:7]
+    elif len(parts) == 6:
+        duid, manu, brand, model, display, oaid = parts
+    else:
         raise CredentialMissing(
-            f"device_code 字段不足（需要 duid:manu:brand:model:display:oaid，实际 {len(parts)} 段）"
+            "device_code 格式不对：需要 6 段（duid:厂商:品牌:机型:显示:oaid）"
+            f"或 7 段（前缀标签 + 上述 6 段），实际 {len(parts)} 段"
         )
-    _, duid, manu, brand, model, display, oaid = parts[:7]
     plain = f"{duid}; ; ; ; {manu}; {brand}; {model}; {display}; {oaid}"
     return base64.b64encode(plain.encode()).decode()[::-1].replace("=", "")

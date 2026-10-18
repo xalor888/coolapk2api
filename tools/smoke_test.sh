@@ -25,7 +25,7 @@ TMP_CRED=""
 if [ ! -s secrets/coolapk_cookie.txt ] || [ ! -s secrets/device_code.txt ] || [ ! -s secrets/auth_blob.b64 ]; then
   TMP_CRED="$(mktemp -d)"
   printf 'uid=10000; token=dummy-cookie-for-mock; SESSID=dummy\n' > "$TMP_CRED/cookie.txt"
-  printf 'testduid0123456789:Google:google:sdk_gphone64_arm64:sdk_gphone64_arm64-userdebug:dev-keys\n' > "$TMP_CRED/device.txt"
+  printf 'label:testduid0123456789:Google:google:sdk_gphone64_arm64:sdk_gphone64_arm64-userdebug:dev-keys\n' > "$TMP_CRED/device.txt"
   python3 - "$TMP_CRED/blob.b64" <<'PYEOF'
 import base64, os, sys
 open(sys.argv[1], 'w').write(base64.b64encode(os.urandom(930)).decode())
