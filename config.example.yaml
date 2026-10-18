@@ -1,0 +1,39 @@
+# ===== coolapk2api 配置示例 =====
+# 复制为 config.yaml 后按需修改；config.yaml 已被 .gitignore 排除。
+# 所有项都可以用环境变量覆盖（见 README「配置」章节），环境变量优先级更高。
+
+server:
+  # 只监听本机，避免把网关暴露到公网
+  host: 127.0.0.1
+  port: 8321
+  # 设置后，客户端必须带 Authorization: Bearer <key> 或 x-api-key: <key>
+  # 留空 = 不校验（仅限本机使用）
+  api_key: ""
+
+upstream:
+  # 酷安 API 根地址。若本机出口被边缘节点拦截（见 docs/ARCHITECTURE.md），
+  # 可指向一台国内中转，例如 https://relay.example.com/coolapk
+  base: https://api.coolapk.com
+  # 找 AI 入口 feed 用的搜索词（任意热门词即可）
+  discovery_query: MIUI
+  # feed_id + aiAccessKey 缓存秒数
+  context_ttl: 3600
+  # 单次请求超时（秒）；流式读取用 stream_timeout
+  request_timeout: 15
+  stream_timeout: 90
+
+models:
+  # 对外暴露的模型名；不在此列表的一律回落到 default
+  available: [deepseek-v3, deepseek-r1]
+  default: deepseek-v3
+
+credentials:
+  # 相对项目根目录，也可写绝对路径
+  cookie_file: secrets/coolapk_cookie.txt
+  device_file: secrets/device_code.txt
+  # 从 CoolApk 的 libauth.so 提取的 1240 字节选择表（base64）
+  # 生成方式：python tools/extract_auth_blob.py --so <你的 libauth.so>
+  blob_file: secrets/auth_blob.b64
+
+logging:
+  level: info

@@ -1,0 +1,51 @@
+# --- 凭据与本地状态（绝不入库）---
+secrets/
+*.cookie.txt
+cookie.txt
+device_code.txt
+ai_access_key.txt
+feed_id.txt
+*.key
+*.p12
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+
+# --- 认证/会话素材 ---
+auth/
+*.blob
+auth_blob*
+
+# --- 逆向与样本（体积大、含版权物）---
+*.apk
+*.aab
+*.ap_
+*.dex
+*.so
+*.jar
+apktool_out/
+jadx_out/
+jadx_*/
+realdex/
+kd/
+md/
+md2/
+memdump/
+refs/
+so_triage/
+frida-server
+fs16
+*.bin
+*.gz
+
+# --- 运行时产物 ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.log
+*.pid
+.DS_Store

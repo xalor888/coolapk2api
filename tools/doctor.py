@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""分层诊断：一眼看出卡在凭证、网络、边缘拦截还是鉴权。
+
+    python tools/doctor.py            # 用项目 config.yaml / 默认路径
+    python tools/doctor.py --deep     # 额外做一次 feed 发现（会消耗一次真实请求）
+"""
+from __future__ import annotations
+
+import argparse
+import socket
+
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import requests  # noqa: E402
+
+from app.config import load_settings  # noqa: E402
+from app.coolapk import auth  # noqa: E402
+from app.coolapk.client import CoolapkClient  # noqa: E402
+from app.coolapk.errors import CoolapkError  # noqa: E402
+
+OK, BAD, WARN = "[✓]", "[✗]", "[!]"
+
+
+def line(mark: str, title: str, detail: str = "") -> None:
+    print(f"{mark} {title}" + (f" — {detail}" if detail else ""))
+
+
+def check_credentials(settings) -> bool:
+    ok = True
+    cookie, device, blob = settings.cookie_path, settings.device_path, settings.blob_path
+    for path, label in ((cookie, "cookie"), (device, "device_code"), (blob, "auth blob")):
+        if path.exists() and path.stat().st_size > 0:
+            line(OK, f"{label:11} {path} ({path.stat().st_size} B)")
+        else:
+            line(BAD, f"{label:11} 缺失 {path}")
+            ok = False
+    if device.exists():
+        try:
+            dev = auth.decode_device_spec(device.read_text().strip())
+            line(OK, "X-App-Device", f"len={len(dev)} {dev[:16]}…")
+        except Exception as exc:
+            line(BAD, "X-App-Device 解析", str(exc))
+            ok = False
+    if blob.exists():
+        try:
+            b = auth.load_blob(blob)
+            token = auth.get_app_token("doctor-probe-device", b)
+            line(OK, "Token V3", f"{token[:14]}… len={len(token)}")
+        except Exception as exc:
+            line(BAD, "Token V3 生成", str(exc))
+            ok = False
+    return ok
+
+
+def check_network(base: str) -> bool:
+    host = urlparse(base).hostname or ""
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        ips = sorted({i[4][0] for i in infos})
+        line(OK, "DNS", f"{host} -> {', '.join(ips[:3])}")
+    except Exception as exc:
+        line(BAD, "DNS", f"{host}: {exc}")
+        return False
+    # TLS：以 requests 的实际握手为准（它用 certifi；本机若有 MITM 根证书，
+    # 系统信任链和 OpenSSL 默认路径可能不一致，裸 ssl 会误报）。
+    try:
+        resp = requests.get(f"https://{host}/", timeout=10)
+        line(OK, "TLS+HTTP", f"HTTP {resp.status_code} {len(resp.content)}B")
+    except requests.exceptions.SSLError as exc:
+        line(BAD, "TLS", f"证书校验失败：{exc}")
+        print("      若本机装了抓包/代理的根证书，请确认它已进 certifi 信任链。")
+        return False
+    except Exception as exc:
+        line(BAD, "TLS+HTTP", str(exc))
+        return False
+    return True
+
+
+def check_api(client: CoolapkClient, deep: bool) -> int:
+    info = client.health(deep=deep)
+    if info.get("ok"):
+        line(OK, "上游 /v6 通路", f"feed_id={info.get('feed_id', '(未探测)')}")
+        return 0
+
+    stage, err = info.get("stage"), info.get("error", "")
+    if stage == "edge":
+        line(BAD, "上游 /v6 通路", "被 TencentEdgeOne 边缘拦截（403 空响应）")
+        print("      原因通常是出口 IP 不在允许范围（机房/海外 IP 常见）。")
+        print("      可选处置：")
+        print("        1) 换到国内网络出口后重跑本诊断；")
+        print("        2) 把 upstream.base 指向国内中转（见 docs/ARCHITECTURE.md）；")
+        print("        3) 用 tools/mock_upstream.py 验证网关自身逻辑。")
+    elif stage == "auth":
+        line(BAD, "上游鉴权", err)
+        print("      cookie 已失效：需在 App 内重新登录并导出 cookie。")
+    elif stage == "credentials":
+        line(BAD, "本地凭证", err)
+    elif stage == "network":
+        line(BAD, "网络", err)
+    else:
+        line(BAD, "上游", f"{stage}: {err}")
+    return 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="coolapk2api 诊断")
+    parser.add_argument("--deep", action="store_true", help="额外做一次 feed 发现")
+    parser.add_argument("--config", default=None)
+    args = parser.parse_args()
+
+    settings = load_settings(args.config)
+    print(f"project  {Path(__file__).resolve().parent.parent}")
+    print(f"upstream {settings.upstream.base}")
+    print("-" * 60)
+
+    creds_ok = check_credentials(settings)
+    net_ok = check_network(settings.upstream.base)
+    if not creds_ok or not net_ok:
+        print("-" * 60)
+        print("结论：先修好上面标 ✗ 的项，再做上游探测。")
+        return 1
+
+    client = CoolapkClient(settings)
+    code = check_api(client, args.deep)
+    print("-" * 60)
+    print("结论：" + ("全链路可用。" if code == 0 else "网关侧代码无问题，上游通路待解决（见上）。"))
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

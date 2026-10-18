@@ -1,0 +1,13 @@
+{
+  "_comment": [
+    "Claude Code / 兼容 Anthropic 协议的客户端配置示例。",
+    "把 ANTHROPIC_BASE_URL 指向本地网关即可；ANTHROPIC_API_KEY 填网关的 PROXY_API_KEY（未设则随便填非空值）。",
+    "Claude Code 用法：把下面 env 段合并进 ~/.claude/settings.json 的 env 字段。"
+  ],
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8321",
+    "ANTHROPIC_API_KEY": "not-needed",
+    "ANTHROPIC_MODEL": "deepseek-v3",
+    "ANTHROPIC_SMALL_FAST_MODEL": "deepseek-v3"
+  }
+}

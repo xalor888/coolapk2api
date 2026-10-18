@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>酷安 AI 反代</title>
+<style>
+  :root {
+    --bg: #0b0d12; --bg2: #12151d; --bg3: #1a1e29; --line: #262c3a;
+    --txt: #e8eaf0; --dim: #8b93a7; --acc: #6e8bff; --acc2: #9d7bff;
+    --user: #2b3a6b; --ok: #34d399; --err: #f87171;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--txt); height: 100vh;
+    font: 14px/1.65 -apple-system, "PingFang SC", "Segoe UI", "Noto Sans CJK SC", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+    background: linear-gradient(180deg, var(--bg2), var(--bg));
+    border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .logo {
+    font-weight: 700; font-size: 15px;
+    background: linear-gradient(90deg, var(--acc), var(--acc2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .pill {
+    font-size: 12px; color: var(--dim); border: 1px solid var(--line);
+    padding: 3px 10px; border-radius: 99px; background: var(--bg3);
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  .dot.bad { background: var(--err); }
+  .spacer { flex: 1; }
+  select, button {
+    background: var(--bg3); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  select:hover, button:hover { border-color: var(--acc); }
+  button.primary {
+    background: linear-gradient(90deg, var(--acc), var(--acc2));
+    border: none; color: #fff; font-weight: 600; padding: 8px 18px;
+  }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  main { flex: 1; overflow-y: auto; padding: 24px 20px 16px; }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  .msg { display: flex; gap: 12px; margin-bottom: 22px; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #fff;
+  }
+  .msg.user .avatar { background: #3b4a7a; }
+  .msg.ai .avatar { background: linear-gradient(135deg, var(--acc), var(--acc2)); }
+  .bubble {
+    flex: 1; min-width: 0; padding: 12px 16px; border-radius: 12px;
+    background: var(--bg2); border: 1px solid var(--line); word-wrap: break-word;
+  }
+  .msg.user .bubble { background: var(--user); border-color: #3b4a7a; }
+  .bubble pre {
+    background: #0a0c10; border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin: 8px 0; overflow-x: auto;
+    font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .bubble code { font-family: ui-monospace, Menlo, monospace; font-size: .92em; background: #0a0c10; padding: 1px 5px; border-radius: 4px; }
+  .bubble pre code { background: none; padding: 0; }
+  .cursor { display: inline-block; width: 8px; height: 15px; background: var(--acc); vertical-align: -2px; animation: blink .8s steps(2) infinite; border-radius: 2px; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .think { color: var(--dim); font-size: 12.5px; border-left: 2px solid var(--line); padding-left: 10px; margin-bottom: 8px; white-space: pre-wrap; }
+  footer { border-top: 1px solid var(--line); padding: 14px 20px 18px; background: var(--bg2); }
+  .composer { max-width: 820px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1; background: var(--bg3); border: 1px solid var(--line); color: var(--txt);
+    border-radius: 12px; padding: 11px 14px; font: inherit; resize: none; min-height: 46px; max-height: 160px;
+  }
+  textarea:focus { outline: none; border-color: var(--acc); }
+  .hint { text-align: center; color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .empty { text-align: center; color: var(--dim); padding: 60px 0; }
+  .empty h2 { font-size: 20px; color: var(--txt); margin-bottom: 10px; font-weight: 600; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .chips span {
+    border: 1px solid var(--line); border-radius: 99px; padding: 5px 14px;
+    font-size: 12.5px; color: var(--dim); cursor: pointer; background: var(--bg2);
+  }
+  .chips span:hover { color: var(--txt); border-color: var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">⚡ 酷安 AI 反代</span>
+  <span class="pill"><span class="dot" id="dot"></span><span id="status">连接中…</span></span>
+  <span class="pill">上下文 feed <b id="feed" style="color:var(--txt)">—</b></span>
+  <span class="pill">密钥 <span id="auth" style="color:var(--txt)">—</span></span>
+  <div class="spacer"></div>
+  <select id="model">
+    <option value="deepseek-v3">deepseek-v3</option>
+    <option value="deepseek-r1">deepseek-r1 (推理)</option>
+  </select>
+  <button id="clear">清空</button>
+</header>
+<main><div class="wrap" id="chat">
+  <div class="empty" id="empty">
+    <h2>今天想聊什么？</h2>
+    <p>帖子内容总结 · 翻译 · 改写 · 问答 —— 都可以</p>
+    <div class="chips">
+      <span onclick="ask(this)">这个帖子讲了什么？三句话总结</span>
+      <span onclick="ask(this)">把上面的内容翻译成英文</span>
+      <span onclick="ask(this)">用 bullet points 列出要点</span>
+    </div>
+  </div>
+</div></main>
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+    <button class="primary" id="send">发送</button>
+  </div>
+  <div class="hint">OpenAI 兼容 <code>POST /v1/chat/completions</code> · Anthropic 兼容 <code>POST /v1/messages</code></div>
+</footer>
+<script>
+const chat = document.getElementById('chat'), input = document.getElementById('input');
+const sendBtn = document.getElementById('send'), dot = document.getElementById('dot');
+let busy = false, history = [];
+
+function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function md(src){
+  let s = esc(src);
+  s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, (m,l,c)=>'<pre><code>'+c.replace(/\n$/,'')+'</code></pre>');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  s = s.replace(/^### (.+)$/gm, '<b>$1</b>');
+  s = s.replace(/^[-•] (.+)$/gm, '• $1');
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+function addMsg(role, text){
+  document.getElementById('empty')?.remove();
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.innerHTML = '<div class="avatar">' + (role === 'user' ? '你' : 'AI') + '</div><div class="bubble"></div>';
+  d.querySelector('.bubble').innerHTML = text ? md(text) : '';
+  chat.appendChild(d);
+  d.scrollIntoView({behavior:'smooth', block:'end'});
+  return d.querySelector('.bubble');
+}
+input.addEventListener('input', ()=>{ input.style.height='auto'; input.style.height=Math.min(160,input.scrollHeight)+'px'; });
+input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); doSend(); }});
+sendBtn.onclick = doSend;
+document.getElementById('clear').onclick = ()=>{ history=[]; chat.innerHTML=''; };
+function ask(el){ input.value = el.textContent; doSend(); }
+
+async function doSend(){
+  const text = input.value.trim();
+  if(!text || busy) return;
+  busy = true; sendBtn.disabled = true;
+  history.push({role:'user', content:text});
+  addMsg('user', esc(text));
+  input.value = ''; input.style.height = 'auto';
+  const bubble = addMsg('ai', '');
+  bubble.innerHTML = '<span class="cursor"></span>';
+  let acc = '', accThink = '';
+  const model = document.getElementById('model').value;
+  try{
+    const r = await fetch('/v1/chat/completions', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model, stream:true, messages:history})
+    });
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf='';
+    while(true){
+      const {done, value} = await reader.read(); if(done) break;
+      buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n'); buf = lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if(payload === '[DONE]') continue;
+        try{
+          const j = JSON.parse(payload);
+          const delta = j.choices?.[0]?.delta?.content || '';
+          if(delta){ acc += delta; bubble.innerHTML = md(acc) + '<span class="cursor"></span>';
+            bubble.parentElement.scrollIntoView({behavior:'smooth', block:'end'}); }
+        }catch(e){}
+      }
+    }
+    bubble.innerHTML = md(acc) || '(空响应)';
+    history.push({role:'assistant', content:acc});
+  }catch(e){
+    bubble.innerHTML = '<span style="color:var(--err)">请求失败: ' + esc(e.message) + '</span>';
+  }
+  busy = false; sendBtn.disabled = false; input.focus();
+}
+
+(async function init(){
+  try{
+    const r = await fetch('/v1/panel/status'); const s = await r.json();
+    dot.classList.toggle('bad', !s.ok);
+    document.getElementById('status').textContent = s.ok ? '在线' : '异常: ' + (s.error||'');
+    document.getElementById('feed').textContent = s.feed_id || '—';
+    document.getElementById('auth').textContent = s.auth;
+  }catch(e){ dot.classList.add('bad'); document.getElementById('status').textContent = '离线'; }
+})();
+</script>
+</body>
+</html>
