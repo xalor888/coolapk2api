@@ -152,6 +152,9 @@ curl -N http://127.0.0.1:8321/v1/chat/completions \
 bash tools/smoke_test.sh
 ```
 
+**不需要先有酷安账号**：脚本发现 `secrets/` 不全会自造一套临时测试凭证（mock 上游不校验登录态），
+所以 `git clone` 后直接跑就能看到 15/15。
+
 覆盖：healthz、模型列表、鉴权 401/200、OpenAI 非流式/流式、Anthropic 非流式/流式、面板。
 
 ```bash

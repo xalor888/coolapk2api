@@ -19,10 +19,28 @@ FAIL=0
 MOCK_PID=""
 GW_PID=""
 
+# 没有真实凭证时，造一套临时凭证（mock 上游不校验 cookie，token 只要有 blob 就能生成）。
+# 这样"clone 下来直接跑冒烟"不需要先搞到酷安账号。
+TMP_CRED=""
+if [ ! -s secrets/coolapk_cookie.txt ] || [ ! -s secrets/device_code.txt ] || [ ! -s secrets/auth_blob.b64 ]; then
+  TMP_CRED="$(mktemp -d)"
+  printf 'uid=10000; token=dummy-cookie-for-mock; SESSID=dummy\n' > "$TMP_CRED/cookie.txt"
+  printf 'testduid0123456789:Google:google:sdk_gphone64_arm64:sdk_gphone64_arm64-userdebug:dev-keys\n' > "$TMP_CRED/device.txt"
+  python3 - "$TMP_CRED/blob.b64" <<'PYEOF'
+import base64, os, sys
+open(sys.argv[1], 'w').write(base64.b64encode(os.urandom(930)).decode())
+PYEOF
+  export COOLAPK2API_COOKIE_FILE="$TMP_CRED/cookie.txt"
+  export COOLAPK2API_DEVICE_FILE="$TMP_CRED/device.txt"
+  export COOLAPK2API_BLOB_FILE="$TMP_CRED/blob.b64"
+  echo "[i] secrets/ 不全，已生成临时测试凭证于 $TMP_CRED"
+fi
+
 cleanup() {
   [ -n "$GW_PID" ] && kill "$GW_PID" 2>/dev/null
   [ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null
   wait 2>/dev/null
+  [ -n "$TMP_CRED" ] && rm -rf "$TMP_CRED"
 }
 trap cleanup EXIT
 
