@@ -139,6 +139,29 @@ OUT=$(curl -s -m 10 "$BASE/v1/panel/status"); echo "   $OUT"
 echo "$OUT" | grep -q '"ok": *true'; check "panel/status ok" $? "$OUT"
 
 echo
+echo "== 8. 诊断器 stage 判定（真实 http mock）=="
+EDGE_PORT=$((MOCK_PORT + 1))
+python3 tools/mock_upstream.py --port "$EDGE_PORT" --mode edge >/tmp/coolapk2api-mock-edge.log 2>&1 &
+EDGE_PID=$!
+wait_for "http://127.0.0.1:$EDGE_PORT/v6/main/init" 10 || true
+
+OUT=$(COOLAPK2API_UPSTREAM="http://127.0.0.1:$MOCK_PORT" python3 tools/doctor.py 2>&1)
+echo "$OUT" | grep -E '可达|通路|结论' | sed 's/^/   /'
+echo "$OUT" | grep -q '全链路可用'; check "doctor 指向 http mock → 全链路可用" $? "$OUT"
+echo "$OUT" | grep -q 'HTTP 可达'; check "doctor 按实际 scheme/端口探测（非 https:443）" $? "$OUT"
+
+OUT=$(COOLAPK2API_UPSTREAM="http://127.0.0.1:$EDGE_PORT" python3 tools/doctor.py 2>&1)
+echo "$OUT" | grep -E '通路|结论' | sed 's/^/   /'
+echo "$OUT" | grep -q '边缘拦截'; check "doctor 在 edge 上游 → 正确报边缘拦截（未被网络层短路）" $? "$OUT"
+kill "$EDGE_PID" 2>/dev/null; wait "$EDGE_PID" 2>/dev/null
+
+echo
+echo "== 9. 鉴权状态如实反映 =="
+OUT=$(curl -s -m 10 "$BASE/v1/panel/status")
+echo "   $(printf '%s' "$OUT" | head -c 140)"
+echo "$OUT" | grep -q '"auth": *"required"'; check "设了 key → panel.auth=required（不再是误导性的变量名）" $? "$OUT"
+
+echo
 echo "======================================"
 printf '通过 %d / 失败 %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || { echo "--- 网关日志尾部 ---"; tail -30 /tmp/coolapk2api-gw.log; }
