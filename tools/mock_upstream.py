@@ -7,9 +7,13 @@
     COOLAPK2API_UPSTREAM=http://127.0.0.1:8899 python -m app.main --port 8321
 
 支持 `--mode` 复刻三种上游状态：
-    ok    正常返回（默认）
-    edge  复刻 TencentEdgeOne 拦截：403 + 空体 + EO-LOG-UUID 头
-    auth  复刻源站鉴权失败：200 + JSON {"status":403,"message":"API unsupported."}
+    ok            正常返回（默认）
+    blocked_path  复刻「该路径被拒」：403 + 0 字节响应体（带 Server / EO-LOG-UUID 头）
+    auth          复刻源站鉴权失败：200 + JSON {"status":403,"message":"API unsupported."}
+
+模式名为什么是 `blocked_path` 而不是 `edge`：`edge` 是**推断性归因**——403 + 0 字节无法归因到
+边缘节点，因为 `Server: TencentEdgeOne` 与 `EO-LOG-UUID` 在 200 响应上同样出现，两者区分不了
+「边缘拦截」和「源站拒绝路径/凭据」。`blocked_path` 只陈述实测判据：该路径被拒（403 且响应体 0 字节）。
 """
 from __future__ import annotations
 
@@ -53,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- routes
     def do_GET(self):
         path = urlparse(self.path).path
-        if MODE == "edge" and path.startswith("/v6/"):
+        if MODE == "blocked_path" and path.startswith("/v6/"):
             return self._edge_block()
         if path == "/v6/main/init":
             if MODE == "auth":   # 复刻源站对失效接口的 200+JSON 拒绝
@@ -68,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length) if length else b""
 
-        if MODE == "edge" and path.startswith("/v6/"):
+        if MODE == "blocked_path" and path.startswith("/v6/"):
             return self._edge_block()
         if MODE == "auth":
             return self._send_json({"status": 403, "message": "API unsupported."})
@@ -114,7 +118,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="coolapk2api mock 上游")
     parser.add_argument("--port", type=int, default=8899)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--mode", choices=["ok", "edge", "auth"], default="ok")
+    parser.add_argument("--mode", choices=["ok", "blocked_path", "auth"], default="ok")
     args = parser.parse_args()
     MODE = args.mode
 

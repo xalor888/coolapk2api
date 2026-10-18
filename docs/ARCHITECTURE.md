@@ -71,7 +71,10 @@ token  = "v3" + base64(hash)                 # 82 字符
 
 ## 5. 出口 IP 与「国内中转」方案
 
-`api.coolapk.com/v6/*` 由 TencentEdgeOne 承载，实测对海外/机房出口返回路径级 403。
+`api.coolapk.com/v6/*` 由 TencentEdgeOne 承载。**在本机这个美国出口（38.146.28.52）上实测被拦**
+（403 + 0 字节响应体）；**是否按地域下发尚未验证** —— 本轮没有任何其他出口的对照数据。
+`Server: TencentEdgeOne` 与 `EO-LOG-UUID` 在 200 响应上同样出现，不能用于归因。
+验证方式见 `state/research/coolapk-route-options.md` 第四节（在国内机器上三行 curl 即可对照）。
 如果你的机器不在国内网络里，有两种做法（都不需要改网关代码）：
 
 ### 方案 A：本机挂国内出口
@@ -112,5 +115,5 @@ COOLAPK2API_UPSTREAM=https://relay.example.com python -m app.main
 ## 6. 为什么有 mock 上游
 
 上游可能因为出口、灰度、风控临时不可用。`tools/mock_upstream.py` 用标准库复刻了三个真实行为
-（`ok` / `edge` / `auth`），让**网关自身的协议转换永远可回归**——这样"上游挂了"和"代码坏了"
-在测试层面就能分开。`tools/smoke_test.sh` 的 15 项断言全部基于它。
+（`ok` / `blocked_path` / `auth`），让**网关自身的协议转换永远可回归**——这样"上游挂了"和"代码坏了"
+在测试层面就能分开。`tools/smoke_test.sh` 的断言全部基于它（条数以脚本末尾 `通过 n` 为唯一出处）。

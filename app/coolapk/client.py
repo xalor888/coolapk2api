@@ -109,8 +109,15 @@ class CoolapkClient:
     def _classify(self, resp: requests.Response, body: str | None = None) -> None:
         """把上游的各种拒绝形态拆成可操作的异常。
 
-        注意：酷安对「鉴权失效 / 接口不支持」是 **HTTP 200 + JSON {"status":403,...}**
-        （实测 /v5/main/init），所以 200 也要看响应体。
+        判据现状（T27 起如实描述，不再宣称"实测"）：
+
+        1) 403 + **0 字节**响应体 → 路径/凭据被拒。**不要**用 `Server: …EdgeOne` 或
+           `EO-LOG-UUID` 归因：这两个头在 200 响应上同样出现，无法区分"边缘拦"与"源站拒"。
+        2) 200 + JSON `{"status":403,...}` → 源站明确拒绝（鉴权/版本），需要重登拿新 cookie。
+        3) 43 字节兜底体 → **无法区分**「无此路由」与「凭据被拒」：它与凭空假路径
+           （如 `/v5/main/zzz_no_such_endpoint`）返回逐字节相同的内容，既不是真端点、也不是鉴权样本。
+           因此 `AuthExpired` 的触发条件**目前没有任何正样本支撑**，属未验证推断。
+        4) 本项目实际使用的端点见 `POST /v6/search`（baseUrl 以 `/v6/` 结尾）。
         """
         text = resp.text if body is None else body
         server = resp.headers.get("server", "")
@@ -118,9 +125,9 @@ class CoolapkClient:
         if resp.status_code == 403 and not text.strip() and (
                 "EdgeOne" in server or "EO-LOG-UUID" in resp.headers):
             raise EdgeBlocked(
-                "被 TencentEdgeOne 边缘节点拦截（403 空响应）。"
-                "常见原因：出口 IP 不在允许范围。可换国内出口，"
-                "或把 upstream.base 指向国内中转。"
+                "上游拒绝该路径：403 + 0 字节响应体（路径/凭据被拒）。"
+                "注意 Server 与 EO-LOG-UUID 在 200 上同样出现，不能据此归因到边缘节点；"
+                "换出口仅是可验证的假设之一，先确认 cookie 是否有效。"
             )
 
         payload = None
@@ -267,7 +274,7 @@ class CoolapkClient:
                 info["feed_id"] = ctx.feed_id
             info["ok"] = True
         except EdgeBlocked as exc:
-            info.update(stage="edge", error=str(exc))
+            info.update(stage="blocked_path", error=str(exc))
         except AuthExpired as exc:
             info.update(stage="auth", error=str(exc))
         except CoolapkError as exc:

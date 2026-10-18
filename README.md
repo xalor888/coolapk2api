@@ -157,12 +157,12 @@ curl -N http://127.0.0.1:8321/v1/chat/completions \
 ## 6. 验证
 
 ```bash
-# 不依赖酷安的完整回归：拉起 mock 上游 + 网关，跑 15 项断言
+# 不依赖酷安的完整回归：拉起 mock 上游 + 网关，跑全部断言
 bash tools/smoke_test.sh
 ```
 
 **不需要先有酷安账号**：脚本发现 `secrets/` 不全会自造一套临时测试凭证（mock 上游不校验登录态），
-所以 `git clone` 后直接跑就能看到 15/15。
+所以 `git clone` 后直接跑就能看到末行的 `通过 n / 失败 0`（断言条数以该行为唯一出处，本文不抄数字）。
 
 覆盖：healthz、模型列表、鉴权 401/200、OpenAI 非流式/流式、Anthropic 非流式/流式、面板。
 
@@ -178,10 +178,12 @@ python tools/doctor.py --deep
 
 ## 7. 已知限制
 
-1. **出口 IP 可能被边缘节点拦**。酷安 `api.coolapk.com/v6/*` 走 TencentEdgeOne，
-   海外/机房 IP 常被路径级规则 403（空响应），与 cookie 新旧无关。
-   本机实测就是这种情况；**换国内出口**或把 `upstream.base` 指向一台国内中转即可，网关代码无需改。
-   诊断器会明确报 `stage: edge`。
+1. **上游可能拒绝某些路径（403 + 0 字节）**，且**未必与出口地域有关**。
+   判据是 `403` 且响应体为 **0 字节** = 路径/凭据被拒。**不要**用 `Server: …EdgeOne`
+   或 `EO-LOG-UUID` 归因——这两个头在 **200 响应上同样出现**，区分不了「边缘拦」与「源站拒」。
+   本机（美国出口 38.146.28.52）实测被拦；**是否按地域下发、换国内出口是否有效，均尚未验证**。
+   优先怀疑 cookie 失效；换出口/国内中转只是待验证的处置选项（见 `docs/ARCHITECTURE.md`）。
+   诊断器会把这一类报成 `stage: blocked_path`。
 2. **上游只收单条 prompt**。多轮对话是压平成 `[user]/[assistant]` 文本段传过去的，
    所以模型没有真正的多轮记忆，只是"读到了历史文本"。
 3. **usage 是估算值**（按字符数折算），上游不给 token 数。
@@ -210,8 +212,8 @@ coolapk2api/
 ├── tools/
 │   ├── doctor.py          分层诊断
 │   ├── extract_auth_blob.py  blob 提取
-│   ├── mock_upstream.py   本地 mock 上游（ok / edge / auth 三种模式）
-│   └── smoke_test.sh      15 项端到端断言
+│   ├── mock_upstream.py   本地 mock 上游（ok / blocked_path / auth 三种模式）
+│   └── smoke_test.sh      端到端断言（条数以脚本末尾 `通过 n` 为唯一出处）
 ├── examples/              curl / python / Claude 配置
 ├── docs/                  架构与逆向说明
 ├── config.example.yaml

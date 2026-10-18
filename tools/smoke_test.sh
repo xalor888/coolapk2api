@@ -141,7 +141,7 @@ echo "$OUT" | grep -q '"ok": *true'; check "panel/status ok" $? "$OUT"
 echo
 echo "== 8. 诊断器 stage 判定（真实 http mock）=="
 EDGE_PORT=$((MOCK_PORT + 1))
-python3 tools/mock_upstream.py --port "$EDGE_PORT" --mode edge >/tmp/coolapk2api-mock-edge.log 2>&1 &
+python3 tools/mock_upstream.py --port "$EDGE_PORT" --mode blocked_path >/tmp/coolapk2api-mock-blocked.log 2>&1 &
 EDGE_PID=$!
 wait_for "http://127.0.0.1:$EDGE_PORT/v6/main/init" 10 || true
 
@@ -152,7 +152,20 @@ echo "$OUT" | grep -q 'HTTP 可达'; check "doctor 按实际 scheme/端口探测
 
 OUT=$(COOLAPK2API_UPSTREAM="http://127.0.0.1:$EDGE_PORT" python3 tools/doctor.py 2>&1)
 echo "$OUT" | grep -E '通路|结论' | sed 's/^/   /'
-echo "$OUT" | grep -q '边缘拦截'; check "doctor 在 edge 上游 → 正确报边缘拦截（未被网络层短路）" $? "$OUT"
+# 判据必须落在「403 + 0 字节」这条真证据上，而不是"边缘拦截"这个推断性措辞
+echo "$OUT" | grep -q '403 + 0 字节'; check "doctor 在 blocked_path 上游 → 报「该路径被拒（403 + 0 字节）」" $? "$OUT"
+echo "$OUT" | grep -q '不能用 Server / EO-LOG-UUID 归因'; check "doctor 明确说明 Server/EO-LOG-UUID 不能用于归因" $? "$OUT"
+echo "$OUT" | grep -q '尚未验证'; check "doctor 把「按地域下发」标成未验证假设，不说成已证实" $? "$OUT"
+
+# 文档措辞也要能被抓：T27 的错误形态是"实测对海外/机房出口返回路径级 403"，
+# 而"按地域下发"从未验证过。只断言 doctor 输出不够 —— 文档才是对外挂着的那个。
+if grep -q '实测对海外' docs/ARCHITECTURE.md README.md 2>/dev/null; then
+  check "文档不得宣称「实测对海外/机房出口」（按地域下发未经验证）" 1 "$(grep -n '实测对海外' docs/ARCHITECTURE.md README.md | head -2)"
+else
+  check "文档不得宣称「实测对海外/机房出口」（按地域下发未经验证）" 0 ""
+fi
+grep -q '尚未验证' docs/ARCHITECTURE.md
+check "ARCHITECTURE 明示「是否按地域下发尚未验证」" $? "$(grep -n '尚未验证' docs/ARCHITECTURE.md | head -1)"
 kill "$EDGE_PID" 2>/dev/null; wait "$EDGE_PID" 2>/dev/null
 
 echo
@@ -160,6 +173,18 @@ echo "== 9. 鉴权状态如实反映 =="
 OUT=$(curl -s -m 10 "$BASE/v1/panel/status")
 echo "   $(printf '%s' "$OUT" | head -c 140)"
 echo "$OUT" | grep -q '"auth": *"required"'; check "设了 key → panel.auth=required（不再是误导性的变量名）" $? "$OUT"
+
+echo
+echo "== 10. 文档不抄断言条数 =="
+# T39：文档里的「N 项断言」是手抄出来的，加两条断言就腐坏一次，而且没人会红。
+# 数字的唯一出处是本脚本末尾的「通过 N / 失败 0」。
+#
+# 自指陷阱（重要）：这道门**不能**断言「文档里的数 == 实际 check 数」——它自己就把实际数 +1，
+# 永远不可能相等。删掉数字后门才自洽：命中即红，无命中即绿，门不参与计数。
+DOC_NUM_PAT='[0-9]+[[:space:]]*项(端到端)?断言|看到[[:space:]]*[0-9]+/[0-9]+'
+DOC_NUM_HITS="$(grep -nE "$DOC_NUM_PAT" README.md docs/ARCHITECTURE.md 2>/dev/null)"
+[ -z "$DOC_NUM_HITS" ]
+check "README/ARCHITECTURE 不写死断言条数（条数只由本脚本末尾输出）" $? "$(printf '%s' "$DOC_NUM_HITS" | head -2)"
 
 echo
 echo "======================================"

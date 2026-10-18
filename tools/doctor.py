@@ -83,7 +83,7 @@ def check_network(base: str) -> bool:
     except requests.exceptions.SSLError as exc:
         line(WARN, "TLS 校验", f"{exc}（继续判定，不阻断）")
     except requests.exceptions.RequestException as exc:
-        # 连接被拒/超时同样不阻断：check_api 会给出 stage=network/edge 的明确结论
+        # 连接被拒/超时同样不阻断：check_api 会给出 stage=network/blocked_path 的明确结论
         line(WARN, label, f"{exc}（继续判定，不阻断）")
     return True
 
@@ -95,13 +95,17 @@ def check_api(client: CoolapkClient, deep: bool) -> int:
         return 0
 
     stage, err = info.get("stage"), info.get("error", "")
-    if stage == "edge":
-        line(BAD, "上游 /v6 通路", "被 TencentEdgeOne 边缘拦截（403 空响应）")
-        print("      原因通常是出口 IP 不在允许范围（机房/海外 IP 常见）。")
-        print("      可选处置：")
-        print("        1) 换到国内网络出口后重跑本诊断；")
-        print("        2) 把 upstream.base 指向国内中转（见 docs/ARCHITECTURE.md）；")
-        print("        3) 用 tools/mock_upstream.py 验证网关自身逻辑。")
+    if stage == "blocked_path":
+        line(BAD, "上游 /v6 通路", "该路径被拒（403 + 0 字节响应体）")
+        print("      判据：403 且响应体为 0 字节 = 路径/凭据被拒。")
+        print("      不能用 Server / EO-LOG-UUID 归因 —— 这两个头在 200 响应上同样出现，")
+        print("      区分不了「边缘拦截」与「源站拒绝」。")
+        print("      优先怀疑 cookie 失效；「换出口」只是待验证的假设（本机为美国出口，")
+        print("      是否按地域下发尚未验证）。可选处置：")
+        print("        1) 先在 App 内重新登录并导出新 cookie 后重跑本诊断；")
+        print("        2) 换到国内网络出口后重跑（用于验证「按地域」这一假设）；")
+        print("        3) 把 upstream.base 指向国内中转（见 docs/ARCHITECTURE.md）；")
+        print("        4) 用 tools/mock_upstream.py 验证网关自身逻辑。")
     elif stage == "auth":
         line(BAD, "上游鉴权", err)
         print("      cookie 已失效：需在 App 内重新登录并导出 cookie。")
