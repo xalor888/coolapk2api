@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Claude Code / 兼容 Anthropic 协议的客户端配置示例。",
-    "把 ANTHROPIC_BASE_URL 指向本地网关即可；ANTHROPIC_API_KEY 填网关的 PROXY_API_KEY（未设则随便填非空值）。",
+    "把 ANTHROPIC_BASE_URL 指向本地网关即可；ANTHROPIC_API_KEY 必须是 COOLAPK2API_API_KEY 的值；未设该变量则随便填非空值（此时网关不鉴权）。",
     "Claude Code 用法：把下面 env 段合并进 ~/.claude/settings.json 的 env 字段。"
   ],
   "env": {

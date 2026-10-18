@@ -31,7 +31,7 @@ credentials:
   # 相对项目根目录，也可写绝对路径
   cookie_file: secrets/coolapk_cookie.txt
   device_file: secrets/device_code.txt
-  # 从 CoolApk 的 libauth.so 提取的 1240 字节选择表（base64）
+  # 从 CoolApk 的 libauth.so 提取的选择表：1240 字符 base64，解码后 930 字节
   # 生成方式：python tools/extract_auth_blob.py --so <你的 libauth.so>
   blob_file: secrets/auth_blob.b64
 

@@ -57,26 +57,34 @@ def check_credentials(settings) -> bool:
 
 
 def check_network(base: str) -> bool:
-    host = urlparse(base).hostname or ""
+    """按 upstream.base 真实的 scheme/端口探测；**失败不短路**后续分层判定。
+
+    历史缺陷：这里曾硬编码 https:443 且失败就 return False —— 于是把 upstream 指向
+    http / 非 443 的国内中转时，诊断器会误报 TLS 失败并直接结束，永远走不到 stage 判定，
+    等于把 README 里"指个中转"这条排障路径废掉。
+    """
+    u = urlparse(base)
+    host = u.hostname or ""
+    scheme = (u.scheme or "https").lower()
+    port = u.port or (443 if scheme == "https" else 80)
+    probe_url = base.rstrip("/") + "/"
+
     try:
-        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
         ips = sorted({i[4][0] for i in infos})
-        line(OK, "DNS", f"{host} -> {', '.join(ips[:3])}")
+        line(OK, "DNS", f"{host}:{port} -> {', '.join(ips[:3])}")
     except Exception as exc:
-        line(BAD, "DNS", f"{host}: {exc}")
-        return False
-    # TLS：以 requests 的实际握手为准（它用 certifi；本机若有 MITM 根证书，
-    # 系统信任链和 OpenSSL 默认路径可能不一致，裸 ssl 会误报）。
+        line(BAD, "DNS", f"{host}: {exc} —— 仍然继续做分层判定")
+
+    label = f"{scheme.upper()} 可达"
     try:
-        resp = requests.get(f"https://{host}/", timeout=10)
-        line(OK, "TLS+HTTP", f"HTTP {resp.status_code} {len(resp.content)}B")
+        resp = requests.get(probe_url, timeout=10)
+        line(OK, label, f"{probe_url} -> HTTP {resp.status_code} {len(resp.content)}B")
     except requests.exceptions.SSLError as exc:
-        line(BAD, "TLS", f"证书校验失败：{exc}")
-        print("      若本机装了抓包/代理的根证书，请确认它已进 certifi 信任链。")
-        return False
-    except Exception as exc:
-        line(BAD, "TLS+HTTP", str(exc))
-        return False
+        line(WARN, "TLS 校验", f"{exc}（继续判定，不阻断）")
+    except requests.exceptions.RequestException as exc:
+        # 连接被拒/超时同样不阻断：check_api 会给出 stage=network/edge 的明确结论
+        line(WARN, label, f"{exc}（继续判定，不阻断）")
     return True
 
 
@@ -118,10 +126,10 @@ def main() -> int:
     print("-" * 60)
 
     creds_ok = check_credentials(settings)
-    net_ok = check_network(settings.upstream.base)
-    if not creds_ok or not net_ok:
+    check_network(settings.upstream.base)   # 只报信息，不拦截后续分层判定
+    if not creds_ok:
         print("-" * 60)
-        print("结论：先修好上面标 ✗ 的项，再做上游探测。")
+        print("结论：先修好上面标 ✗ 的凭证项，再做上游探测。")
         return 1
 
     client = CoolapkClient(settings)

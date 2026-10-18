@@ -85,7 +85,13 @@ python -m app.main                # 或 ./run.sh
 
 ## 4. 配置
 
-`config.yaml`（可选，缺省值即可跑）与**环境变量**都支持，环境变量优先。
+`config.yaml`（可选，缺省值即可跑）与**环境变量**都支持，环境变量优先。共 13 个 `COOLAPK2API_*` 环境变量，下表全列。
+
+> 🔑 **鉴权只有 `COOLAPK2API_API_KEY` 这一个开关**：
+> **不设它就等于网关完全不做鉴权**（任何本机进程都能调用）。设了之后所有 `/v1/*` 请求必须带
+> `Authorization: Bearer <key>` 或 `x-api-key: <key>`。
+> 变量名必须**完全匹配**。写错（或沿用别的名字）不会报错、也不会生效——
+> 启动时若发现环境里有未被识别的 `*_API_KEY`，会打印一条 `[!]` 警告并提示当前没有鉴权。
 
 | 配置项 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
@@ -99,7 +105,9 @@ python -m app.main                # 或 ./run.sh
 | `upstream.stream_timeout` | `COOLAPK2API_STREAM_TIMEOUT` | `90` | 流式读取超时 |
 | `models.available` | — | `deepseek-v3`,`deepseek-r1` | 对外暴露的模型名 |
 | `models.default` | `COOLAPK2API_DEFAULT_MODEL` | `deepseek-v3` | 未知模型回落到它 |
-| `credentials.*_file` | `COOLAPK2API_COOKIE_FILE` 等 | `secrets/...` | 凭证路径 |
+| `credentials.cookie_file` | `COOLAPK2API_COOKIE_FILE` | `secrets/coolapk_cookie.txt` | 登录 cookie 路径 |
+| `credentials.device_file` | `COOLAPK2API_DEVICE_FILE` | `secrets/device_code.txt` | 设备串路径（6 段或 7 段均可） |
+| `credentials.blob_file` | `COOLAPK2API_BLOB_FILE` | `secrets/auth_blob.b64` | Token V3 选择表路径（1240 字符 base64 / 解码 930 字节） |
 | `logging.level` | `COOLAPK2API_LOG_LEVEL` | `info` | 日志级别 |
 
 ## 5. 用法示例
@@ -109,7 +117,8 @@ python -m app.main                # 或 ./run.sh
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://127.0.0.1:8321/v1", api_key="任意非空或你的 PROXY_API_KEY")
+client = OpenAI(base_url="http://127.0.0.1:8321/v1",
+                api_key="not-needed")  # 若设了 COOLAPK2API_API_KEY，这里必须填同一个值
 resp = client.chat.completions.create(
     model="deepseek-v3",
     messages=[{"role": "user", "content": "用三句话解释什么是反向代理"}],
@@ -162,8 +171,10 @@ bash tools/smoke_test.sh
 python tools/doctor.py --deep
 ```
 
-诊断分四层：凭证 → DNS/TLS → `/v6` 通路 → feed 发现，并区分三种失败：
-边缘拦截（403 空响应）、鉴权失效（200 + `status:403`）、网络错误。
+诊断分四层：凭证 → 网络（按 `upstream.base` 的**实际 scheme/端口**探测）→ `/v6` 通路 → feed 发现，
+并区分三种失败：边缘拦截（403 空响应）、鉴权失效（200 + `status:403`）、网络错误。
+网络层探测失败**不会中断**后续判定，所以把 `upstream.base` 指向 http 或非 443 的中转时，
+诊断器仍能给出正确的 `stage`。
 
 ## 7. 已知限制
 

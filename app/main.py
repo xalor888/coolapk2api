@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -65,7 +66,9 @@ def create_app(settings: Settings | None = None,
             "stage": info.get("stage"),
             "error": info.get("error"),
             "feed_id": info.get("feed_id"),
-            "auth": "PROXY_API_KEY" if settings.server.api_key else "off",
+            # 只报真实状态，不暗示任何具体变量名：网关的鉴权只由 COOLAPK2API_API_KEY 决定，
+            # 状态串里若出现别的名字，会让人误以为"设了那个就受保护"
+            "auth": "required" if settings.server.api_key else "disabled",
             "upstream": info.get("upstream"),
         }
 
@@ -210,6 +213,15 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"[*] coolapk2api {__version__} -> http://{settings.server.host}:{settings.server.port}"
           f"  (auth: {'on' if settings.server.api_key else 'off'}, upstream: {settings.upstream.base})")
+
+    # 安全提示：鉴权只认 COOLAPK2API_API_KEY。若用户设了别的 *_API_KEY（历史文档曾用过
+    # 一个旧名），网关不会读它 —— 这种情况要显式吼一声，否则用户会以为已经受保护。
+    stray = sorted(k for k in os.environ
+                   if k.endswith("_API_KEY") and not k.startswith("COOLAPK2API_"))
+    if stray and not settings.server.api_key:
+        print(f"[!] 检测到未识别的 API key 变量：{', '.join(stray)} —— 网关不读取，"
+              f"当前【没有任何鉴权】。", file=sys.stderr)
+        print("[!] 请改用 COOLAPK2API_API_KEY=<同一个值> 后重启。", file=sys.stderr)
     uvicorn.run(create_app(settings), host=settings.server.host, port=settings.server.port,
                 log_level=settings.logging.level)
     return 0
