@@ -176,7 +176,7 @@ python tools/doctor.py --deep
 网络层探测失败**不会中断**后续判定，所以把 `upstream.base` 指向 http 或非 443 的中转时，
 诊断器仍能给出正确的 `stage`。
 
-## 8. 目录结构
+## 7. 目录结构
 
 ```
 coolapk2api/
@@ -204,7 +204,7 @@ coolapk2api/
 └── run.sh
 ```
 
-## 9. 安全与合规
+## 8. 安全与合规
 
 - `.gitignore` 已排除：`secrets/`、`*.apk`、`*.so`、`*.dex`、`auth/`、`build/`、`*.cookie.txt`。
 - 网关默认只监听 `127.0.0.1`；要暴露到局域网请同时设置 `server.api_key`。
